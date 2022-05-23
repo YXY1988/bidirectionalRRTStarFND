@@ -1,20 +1,25 @@
 import random
 import math
+from sqlite3 import Timestamp
 import sys
 import pygame
 import timeit, time
 import numpy as np
 show_animation = True
 
-XDIM = 800
-YDIM = 600
+XDIM = 1740 #34780/20
+YDIM = 832  #15400/20
 windowSize = [XDIM, YDIM]
+cabin_width=140  #2800/20 
+cabin_height=325 #6500/20
+polar_width=8    #160/20
+light_width=10    #200/20 #吊灯 
 
 pygame.init()
 fpsClock = pygame.time.Clock()
 
 screen = pygame.display.set_mode(windowSize)
-pygame.display.set_caption('Performing RRT')
+pygame.display.set_caption('PMCU进舱规划')
 
 
 class RRT():
@@ -43,8 +48,8 @@ class RRT():
         i = 0
 
         while True:
-            print(i)
-
+            # print(i)
+            time_st=time.time()
             rnd = self.get_random_point()
             nind = self.GetNearestListIndex(rnd) # get nearest node index to random point
             newNode = self.steer(rnd, nind) # generate new node from that nearest node in direction of random point
@@ -68,18 +73,20 @@ class RRT():
                         ind = leaves[random.randint(0, len(leaves)-1)]
                         self.nodeList[self.nodeList[ind].parent].children.discard(ind)
                         self.nodeList.pop(ind)
-
-
+            time_ed=time.time()
+            curr_time=time_ed-time_st
             i+=1
-
             if animation and i%25 == 0:
                 self.DrawGraph(rnd)
 
             for e in pygame.event.get():
                 if e.type == pygame.MOUSEBUTTONDOWN:
                     if e.button == 1:
-                        self.obstacleList.append((e.pos[0],e.pos[1],30,30))
+                        pass
+                        # yxy: 改为放置一个舱室作为已完成舱室
+                        self.obstacleList.append((e.pos[0],e.pos[1],cabin_width,cabin_height))
                         self.path_validation()
+                        print(curr_time)
                     elif e.button == 3:
                         self.end.x = e.pos[0]
                         self.end.y = e.pos[1]
@@ -221,7 +228,7 @@ class RRT():
         return True
 
     def DrawGraph(self, rnd=None):
-        u"""
+        """
         Draw Graph
         """
         screen.fill((255, 255, 255))
@@ -233,24 +240,29 @@ class RRT():
             if len(node.children) == 0: 
                 pygame.draw.circle(screen, (255,0,255), [int(node.x),int(node.y)], 2)
                 
-
         for(sx,sy,ex,ey) in self.obstacleList:
-            pygame.draw.rect(screen,(0,0,0), [(sx,sy),(ex,ey)])
+            pygame.draw.rect(screen,(220,0,0), [(sx,sy),(ex,ey)])
 
-        pygame.draw.circle(screen, (255,0,0), [self.start.x, self.start.y], 10)
-        pygame.draw.circle(screen, (0,0,255), [self.end.x, self.end.y], 10)
-
+        # yxy: use rect shape instead of the circle shape of begin and end pose
+        # pygame.draw.circle(screen, (255,0,0), [self.start.x, self.start.y], 10) 
+        # pygame.draw.circle(screen, (0,0,255), [self.end.x, self.end.y], 10)
+        pygame.draw.rect(screen,(0,0,255),[(self.start.x,self.start.y),(cabin_width,cabin_height)])
+        pygame.draw.rect(screen,(0,255,100),[(self.end.x,self.end.y),(cabin_width,cabin_height)])
         lastIndex = self.get_best_last_index()
         if lastIndex is not None:
             path = self.gen_final_course(lastIndex)
-
             ind = len(path)
+            final_dist=0;
+            for i in range(0,ind-1):
+                delta_x=path[i+1][0]-path[i][0]
+                delta_y=path[i+1][1]-path[i][1]
+                final_dist=final_dist+math.sqrt(pow(delta_x,2)+pow(delta_y,2))
+            print('the final dist is: ',final_dist)
             while ind > 1:
                 pygame.draw.line(screen,(255,0,0),path[ind-2],path[ind-1])
                 ind-=1
 
         pygame.display.update()
-
 
     def GetNearestListIndex(self, rnd):
         dlist = np.subtract( np.array([ (node.x, node.y) for node in self.nodeList.values() ]), (rnd[0],rnd[1]))**2
@@ -258,6 +270,7 @@ class RRT():
         minind = list(self.nodeList.keys())[np.argmin(dlist)]
         return minind
 
+    #yxy: 此处node是点，obstacle是rect, 如扩展到推舱，应将node也改为 rect
     def __CollisionCheck(self, node, obstacleList):
 
         for(sx,sy,ex,ey) in obstacleList:
@@ -267,7 +280,6 @@ class RRT():
                     return False
 
         return True  # safe
-
 
 class Node():
     """
@@ -281,25 +293,32 @@ class Node():
         self.parent = None
         self.children = set()
 
-
 def main():
     print("start RRT path planning")
 
     # ====Search Path with RRT====
     obstacleList = [
-        (400, 380, 400, 20),
-        (400, 220, 20, 180),
-        (500, 280, 150, 20),
-        (0, 500, 100, 20),
-        (500, 450, 20, 150),
-        (400, 100, 20, 80),
-        (100, 100, 100, 20)
-    ]  # [x,y,size]
+        # polars x 3
+        (400, 800, polar_width, polar_width),
+        (800, 800, polar_width, polar_width),
+        (1200, 800, polar_width, polar_width),
+        # lights x 6
+        (50, 432, light_width, light_width),
+        (450, 432, light_width, light_width),
+        (750, 432, light_width, light_width),
+        (1050, 432, light_width, light_width),
+        (1350, 432, light_width, light_width),
+        (1650, 432, light_width, light_width),
+        # unavailable areas x 2
+        (620,475,0.5*cabin_width,cabin_height),
+        (1110,475,350,350)
+    ]  # [x,y,w,h]
+    InstalledList = [] #yxy: installed should also be viewed as obstacle
     # Set Initial parameters
-    rrt = RRT(start=[20, 580], goal=[540, 150],
+    rrt = RRT(start=[105, 0], goal=[540, 150],
               randArea=[XDIM, YDIM], obstacleList=obstacleList)
     path = rrt.Planning(animation=show_animation)
 
-
 if __name__ == '__main__':
     main()
+ 
