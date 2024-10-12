@@ -96,7 +96,7 @@ class RRT():
                 if e.type == pygame.QUIT or (e.type == pygame.KEYUP and e.key == pygame.K_ESCAPE):
                     sys.exit("Exiting")
 
-            print(i)
+            #print(i)
         # generate coruse
         lastIndex = self.get_best_last_index()
         if lastIndex is None:
